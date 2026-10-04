@@ -1,0 +1,55 @@
+FROM node:24-bookworm-slim
+
+# Optional, for networks that need a proxy or intercept TLS. Use the Makefile (CA_BUNDLE), or directly:
+# docker build -f Dockerfile.pi --build-arg HTTP_PROXY --build-arg HTTPS_PROXY \
+#   --build-arg NO_PROXY --secret id=ca_bundle,src=/path/to/extra-ca.pem -t pi-sandbox .
+RUN --mount=type=secret,id=ca_bundle,required=false \
+  set -eu; \
+  export http_proxy="${http_proxy:-${HTTP_PROXY:-}}" \
+    https_proxy="${https_proxy:-${HTTPS_PROXY:-}}" \
+    no_proxy="${no_proxy:-${NO_PROXY:-}}"; \
+  apt-get update; \
+  apt-get install -y --no-install-recommends bash ca-certificates curl fd-find git ripgrep; \
+  rm -rf /var/lib/apt/lists/*
+
+# Keep the interpreter and uv in an image layer so restarts don't redownload Python.
+RUN --mount=type=secret,id=ca_bundle,required=false \
+  set -eu; \
+  export http_proxy="${http_proxy:-${HTTP_PROXY:-}}" \
+    https_proxy="${https_proxy:-${HTTPS_PROXY:-}}" \
+    no_proxy="${no_proxy:-${NO_PROXY:-}}" \
+    UV_INSTALL_DIR=/usr/local/bin UV_NO_MODIFY_PATH=1 \
+    UV_PYTHON_INSTALL_DIR=/opt/uv/python UV_PYTHON_BIN_DIR=/usr/local/bin \
+    UV_CACHE_DIR=/tmp/uv-cache; \
+  if [ -s /run/secrets/ca_bundle ]; then \
+    cat /etc/ssl/certs/ca-certificates.crt /run/secrets/ca_bundle > /tmp/pi-ca-bundle.pem; \
+    export SSL_CERT_FILE=/tmp/pi-ca-bundle.pem CURL_CA_BUNDLE=/tmp/pi-ca-bundle.pem \
+      UV_SYSTEM_CERTS=true; \
+  fi; \
+  curl --fail --show-error --location https://astral.sh/uv/install.sh --output /tmp/uv-install.sh; \
+  sh /tmp/uv-install.sh; \
+  uv python install 3.12; \
+  ln -sf python3.12 /usr/local/bin/python3; \
+  ln -sf python3.12 /usr/local/bin/python; \
+  rm -rf /tmp/uv-cache /tmp/uv-install.sh /tmp/pi-ca-bundle.pem
+
+# Last layer so bumping PI_VERSION doesn't rebuild apt or Python.
+ARG PI_VERSION=1.0.0
+RUN --mount=type=secret,id=ca_bundle,required=false \
+  set -eu; \
+  export http_proxy="${http_proxy:-${HTTP_PROXY:-}}" \
+    https_proxy="${https_proxy:-${HTTPS_PROXY:-}}" \
+    no_proxy="${no_proxy:-${NO_PROXY:-}}"; \
+  if [ -s /run/secrets/ca_bundle ]; then export NODE_EXTRA_CA_CERTS=/run/secrets/ca_bundle; fi; \
+  npm install -g --ignore-scripts "@earendil-works/pi-coding-agent@${PI_VERSION}"; \
+  npm cache clean --force
+
+# Disable Pi reporting and automatic upstream requests; the configured LLM endpoint remains available.
+ENV PI_TELEMETRY=0 PI_SKIP_VERSION_CHECK=1 PI_OFFLINE=1
+
+# Writes ~/.pi/agent/models.json from LLM_* env vars at start (see container/).
+COPY --chmod=0755 container/llm-entrypoint.sh /usr/local/bin/llm-entrypoint
+COPY container/llm-config.js /usr/local/lib/pi-sandbox/llm-config.js
+
+WORKDIR /workspace
+ENTRYPOINT ["/usr/local/bin/llm-entrypoint", "pi"]

@@ -1,0 +1,15 @@
+ARG PI_IMAGE=pi-sandbox:latest
+FROM ${PI_IMAGE}
+
+ARG CODEX_VERSION=0.160.0
+RUN --mount=type=secret,id=ca_bundle,required=false \
+  set -eu; \
+  export http_proxy="${http_proxy:-${HTTP_PROXY:-}}" \
+    https_proxy="${https_proxy:-${HTTPS_PROXY:-}}" \
+    no_proxy="${no_proxy:-${NO_PROXY:-}}"; \
+  if [ -s /run/secrets/ca_bundle ]; then export NODE_EXTRA_CA_CERTS=/run/secrets/ca_bundle; fi; \
+  npm install -g --ignore-scripts "@openai/codex@${CODEX_VERSION}"; \
+  npm cache clean --force
+
+# llm-entrypoint (inherited from the Pi image) writes ~/.codex/config.toml, then runs codex.
+ENTRYPOINT ["/usr/local/bin/llm-entrypoint", "codex"]
