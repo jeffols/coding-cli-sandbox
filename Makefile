@@ -138,7 +138,7 @@ run-codex: build-codex prepare-workspace ## Run Codex interactively against WORK
 	  set -- "$$@" -v "$(CA_BUNDLE):/run/secrets/ca_bundle:ro" \
 	    -e NODE_EXTRA_CA_CERTS=/run/secrets/ca_bundle; \
 	fi; \
-	docker run "$$@" "$(CODEX_IMAGE)" --sandbox danger-full-access --model "$(CODEX_MODEL)"
+	docker run "$$@" "$(CODEX_IMAGE)" --no-daemon --sandbox danger-full-access --model "$(CODEX_MODEL)"
 
 # Clone twice instead of worktrees: .git stays usable inside each container.
 duel-setup: ## Clone REPO twice (pi/, codex/) at the same commit for side-by-side runs
