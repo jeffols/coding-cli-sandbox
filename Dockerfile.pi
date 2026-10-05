@@ -9,7 +9,7 @@ RUN --mount=type=secret,id=ca_bundle,required=false \
     https_proxy="${https_proxy:-${HTTPS_PROXY:-}}" \
     no_proxy="${no_proxy:-${NO_PROXY:-}}"; \
   apt-get update; \
-  apt-get install -y --no-install-recommends bash ca-certificates curl fd-find git ripgrep; \
+  apt-get install -y --no-install-recommends bash ca-certificates curl fd-find git procps ripgrep; \
   rm -rf /var/lib/apt/lists/*
 
 # Keep the interpreter and uv in an image layer so restarts don't redownload Python.
